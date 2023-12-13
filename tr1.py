@@ -18,7 +18,7 @@ class TR1(Optimizer):
         params: List[Tensor],
         lr: float = 1.0,
         momentum: float = 0.0,
-        gamma_1: float = 0.5,
+        gamma_1: float = 0.25,
         gamma_2: float = 2,
         eta_1: float = 0.25,
         eta_2: float = 0.75,
