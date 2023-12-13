@@ -9,10 +9,10 @@ from argparse import ArgumentError
 from typing import Any, List, Optional, Union
 from functools import reduce
 
-__all__ = ["TR1"]
+__all__ = ["STORM1"]
 
 
-class TR1(Optimizer):
+class STORM1(Optimizer):
     def __init__(
         self,
         params: List[Tensor],
@@ -42,9 +42,9 @@ class TR1(Optimizer):
             foreach=foreach,
             differentiable=differentiable,
         )
-        super(TR1, self).__init__(params, defaults)
+        super(STORM1, self).__init__(params, defaults)
 
-    def tr1(
+    def storm1(
         self,
         params: List[Tensor],
         d_p_list: List[Tensor],
@@ -126,7 +126,7 @@ class TR1(Optimizer):
                     params_with_grad.append(p)
                     d_p_list.append(p.grad)
                     
-            self.tr1(
+            self.storm1(
                 params_with_grad,
                 d_p_list,
                 maximize=group["maximize"],

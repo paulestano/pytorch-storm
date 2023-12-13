@@ -13,7 +13,7 @@ import os
 import argparse
 
 from resnet import *
-from tr1 import *
+from storm1 import *
 from utils import progress_bar
 
 
@@ -86,7 +86,7 @@ if args.resume:
     start_epoch = checkpoint['epoch']
 
 criterion = nn.CrossEntropyLoss()
-optimizer = TR1(net.parameters(), lr=args.lr, momentum=0.0)
+optimizer = STORM1(net.parameters(), lr=args.lr, momentum=0.0)
 # scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=200)
 
 
