@@ -17,7 +17,7 @@ from storm1 import *
 from utils import progress_bar
 
 
-parser = argparse.ArgumentParser(description='PyTorch CIFAR10 TR1 Training')
+parser = argparse.ArgumentParser(description='PyTorch CIFAR10 STORM1 Training')
 parser.add_argument('--lr', default=0.1, type=float, help='learning rate')
 parser.add_argument('--resume', '-r', action='store_true',
                     help='resume from checkpoint')
@@ -57,7 +57,6 @@ classes = ('plane', 'car', 'bird', 'cat', 'deer',
 # Model
 print('==> Building model..')
 # net = VGG('VGG19')
-# net = ResNet18()
 # net = PreActResNet18()
 # net = GoogLeNet()
 # net = DenseNet121()
@@ -86,7 +85,7 @@ if args.resume:
     start_epoch = checkpoint['epoch']
 
 criterion = nn.CrossEntropyLoss()
-optimizer = STORM1(net.parameters(), lr=args.lr, momentum=0.0)
+optimizer = STORM1(net.parameters(), lr=args.lr, momentum=0.9)
 # scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=200)
 
 
@@ -101,7 +100,12 @@ def train(epoch):
         inputs, targets = inputs.to(device), targets.to(device)
         optimizer.zero_grad()
         outputs = net(inputs)
-        loss = criterion(outputs, targets)
+        l2_lambda = 1e-4
+        l2_reg = torch.tensor(0.).to(device)
+
+        for param in net.parameters():
+            l2_reg += torch.norm(param)
+        loss = criterion(outputs, targets) + l2_lambda * l2_reg
         loss.backward()
         
         # closure for actual reduction computation (required by TR1)
