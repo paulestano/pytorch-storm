@@ -84,7 +84,7 @@ class STORM1(Optimizer):
                         buf = state["momentum_buffer"]
                     if d_p.is_sparse:
                         raise RuntimeError(
-                            "TR1 does not support sparse gradients, please consider SparseAdam instead"
+                            "STORM1 does not support sparse gradients, please consider SparseAdam instead"
                         )
                     if momentum != 0:
 
