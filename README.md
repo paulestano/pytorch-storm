@@ -11,4 +11,4 @@ python train.py
 ## Results
 | Method      | Test Acc. (%) |
 | ----------- | ----------- |
-| STORM1 (ours)   | 93.64        |
+| STORM1 (ours)   | 93.68        |
