@@ -86,7 +86,6 @@ if args.resume:
 
 criterion = nn.CrossEntropyLoss()
 optimizer = STORM1(net.parameters(), lr=args.lr, momentum=0.9)
-# scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=200)
 
 
 # Training
