@@ -9,5 +9,4 @@ python train.py
 ## Results
 | Method      | Test Acc. (%) |
 | ----------- | ----------- |
-| SGD       | 93.02       |
 | STORM1 (ours)   | 93.55        |
