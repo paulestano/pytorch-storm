@@ -107,7 +107,7 @@ if args.resume:
 criterion = nn.CrossEntropyLoss()
 optimizer = STORM1(net.parameters(), lr=args.lr, momentum=0.9) if not args.sgd else optim.SGD(
     net.parameters(), lr=args.lr, momentum=0.9, weight_decay=0)
-scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=200) if not args.sgd else None
+scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=200) if args.sgd else None
 
 # Training
 def train(epoch):
