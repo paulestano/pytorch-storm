@@ -9,4 +9,4 @@ python train.py
 ## Results
 | Method      | Test Acc. (%) |
 | ----------- | ----------- |
-| STORM1 (ours)   | 93.55        |
+| STORM1 (ours)   | 93.56        |
