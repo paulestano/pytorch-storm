@@ -23,22 +23,28 @@ parser = argparse.ArgumentParser(description='PyTorch CIFAR10 STORM1 Training')
 parser.add_argument('--lr', default=0.1, type=float, help='learning rate')
 parser.add_argument('--resume', '-r', action='store_true',
                     help='resume from checkpoint')
+parser.add_argument('--sgd', '--SGD', action='store_true',
+                    help='use SGD instead of STORM1')
 args = parser.parse_args()
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 best_acc = 0  # best test accuracy
 start_epoch = 0  # start from epoch 0 or last checkpoint epoch
+
+
 def set_deterministic(seed=42):
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
     torch.cuda.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed) 
+    torch.cuda.manual_seed_all(seed)
 
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
     torch.backends.cudnn.enabled = False
-seed = 420 # any number 
+
+
+seed = 420  # any number
 set_deterministic(seed=seed)
 
 # Data
@@ -99,8 +105,9 @@ if args.resume:
     start_epoch = checkpoint['epoch']
 
 criterion = nn.CrossEntropyLoss()
-optimizer = STORM1(net.parameters(), lr=args.lr, momentum=0.9)
-
+optimizer = STORM1(net.parameters(), lr=args.lr, momentum=0.9) if not args.sgd else optim.SGD(
+    net.parameters(), lr=args.lr, momentum=0.9, weight_decay=0)
+scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=200) if not args.sgd else None
 
 # Training
 def train(epoch):
@@ -113,14 +120,16 @@ def train(epoch):
         inputs, targets = inputs.to(device), targets.to(device)
         optimizer.zero_grad()
         outputs = net(inputs)
+
+        # We use L2 regularization instead of weight decay
         l2_lambda = 1e-4
         l2_reg = torch.tensor(0.).to(device)
-
         for param in net.parameters():
             l2_reg += torch.norm(param)
+
         loss = criterion(outputs, targets) + l2_lambda * l2_reg
         loss.backward()
-        
+
         optimizer.step()
 
         train_loss += loss.item()
@@ -128,10 +137,14 @@ def train(epoch):
         total += targets.size(0)
         correct += predicted.eq(targets).sum().item()
 
-        progress_bar(batch_idx, len(trainloader), 'Loss: %.3f | Acc: %.3f%% (%d/%d) | lr: %.5f | rho: %.5f'
-                     % (train_loss/(batch_idx+1), 100.*correct/total, correct, 
-                        total, optimizer.param_groups[0]['lr'], rho))
-
+        if not args.sgd:
+            progress_bar(batch_idx, len(trainloader), 'Loss: %.3f | Acc: %.3f%% (%d/%d) | lr: %.5f | rho: %.5f'
+                        % (train_loss/(batch_idx+1), 100.*correct/total, correct,
+                            total, optimizer.param_groups[0]['lr'], rho))
+        else:
+            progress_bar(batch_idx, len(trainloader), 'Loss: %.3f | Acc: %.3f%% (%d/%d) | lr: %.5f'
+                     % (train_loss/(batch_idx+1), 100.*correct/total, correct,
+                        total, optimizer.param_groups[0]['lr']))
 
 def test(epoch):
     global best_acc
@@ -167,6 +180,7 @@ def test(epoch):
         torch.save(state, './checkpoint/ckpt.pth')
         best_acc = acc
 
+
 decrease_ex = next(iter(trainloader))
 outputs = net(decrease_ex[0].to(device))
 loss_prev = criterion(outputs, decrease_ex[1].to(device)).item()
@@ -175,9 +189,13 @@ rho = inf
 for epoch in range(start_epoch, start_epoch+200):
     train(epoch)
     test(epoch)
+
+    # Update scheduler if using SGD
+    if scheduler is not None:
+        scheduler.step()
     
-    # Compute rho every 10 epochs
-    if epoch % 10 == 0:
+    # Compute rho every 10 epochs if using STORM1
+    if epoch % 10 == 0 and not args.sgd:
         with torch.no_grad():
             outputs = net(decrease_ex[0].to(device))
         loss = criterion(outputs, decrease_ex[1].to(device)).item()
@@ -190,9 +208,6 @@ for epoch in range(start_epoch, start_epoch+200):
             lr = lr / 2
         elif rho > 0.75:
             lr = lr * 2
-    
+
         # Update optimizer
         optimizer = STORM1(net.parameters(), lr=lr, momentum=0.9)
-
-
-    
