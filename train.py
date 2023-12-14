@@ -1,5 +1,7 @@
 '''Train CIFAR10 with PyTorch.'''
 from math import inf
+import numpy as np
+import random
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -26,6 +28,18 @@ args = parser.parse_args()
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 best_acc = 0  # best test accuracy
 start_epoch = 0  # start from epoch 0 or last checkpoint epoch
+def set_deterministic(seed=42):
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed) 
+
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+    torch.backends.cudnn.enabled = False
+seed = 420 # any number 
+set_deterministic(seed=seed)
 
 # Data
 print('==> Preparing data..')
