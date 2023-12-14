@@ -43,6 +43,7 @@ class STORM1(Optimizer):
             differentiable=differentiable,
         )
         super(STORM1, self).__init__(params, defaults)
+        self.updates = None
 
     def storm1(
         self,
@@ -60,25 +61,19 @@ class STORM1(Optimizer):
             param.add_(d_p, alpha=-alpha)
 
     @torch.no_grad()
-    def step(self, loss, closure):
+    def step(self, closure=None):
         """Performs a single optimization step.
         Arguments:
-            loss : The loss function evaluated on the current batch.
             closure : A closure that reevaluates the model
                 and returns the loss.
         """
-        if closure is None:
-            raise ValueError("closure is None")
-        if loss is None:
-            raise ValueError("loss is None")
-    
-        norm_flat_grad = []
+        
+        flat_grad = []
         for group in self.param_groups:
             momentum = group["momentum"]
             nesterov = group["nesterov"]
             dampening = group["dampening"]
             maximize = group["maximize"]
-            lr = group["lr"]
             for p in group["params"]:
                 if p.grad is not None:
                     d_p = p.grad if not maximize else -p.grad
@@ -107,8 +102,16 @@ class STORM1(Optimizer):
                 
                 else:
                     view = p.new(p.numel()).zero_()
-                norm_flat_grad.append(view)
-        self._norm_d = torch.linalg.norm(torch.cat(norm_flat_grad, 0))
+                flat_grad.append(view)
+        flat_grad = torch.cat(flat_grad, 0)
+        self._norm_d = torch.linalg.norm(flat_grad)
+
+        alpha = group["lr"] / self._norm_d
+
+        if self.updates is None:
+            self.updates = alpha * flat_grad.clone()
+        else:
+            self.updates = self.updates + alpha * flat_grad
                     
 
 
@@ -116,9 +119,6 @@ class STORM1(Optimizer):
             params_with_grad = []
             d_p_list = []
             momentum_buffer_list = []
-            has_sparse_grad = False
-            gamma_1, gamma_2 = group["gamma_1"], group["gamma_2"]
-            eta_1, eta_2 = group["eta_1"], group["eta_2"]
 
             for p in group["params"]:
                 # print(p.shape)
@@ -136,20 +136,5 @@ class STORM1(Optimizer):
             for p, momentum_buffer in zip(params_with_grad, momentum_buffer_list):
                 state = self.state[p]
                 state["momentum_buffer"] = momentum_buffer
-        
-        updated_loss = closure()    
-            
-        actual_reduction = loss - updated_loss
-        self._rho = actual_reduction / \
-                (lr * self._norm_d) # We consider lr to be the same for all groups
-        
-        if self._rho < eta_1:
-            lr = lr * gamma_1
-        elif self._rho > eta_2:
-            lr = lr * gamma_2
-        
-        # Update learning
-        for group in self.param_groups:
-            group["lr"] = lr
-
-        return loss
+        if closure is not None:
+            return closure()

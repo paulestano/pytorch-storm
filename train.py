@@ -108,13 +108,7 @@ def train(epoch):
         loss = criterion(outputs, targets) + l2_lambda * l2_reg
         loss.backward()
         
-        # closure for actual reduction computation (required by TR1)
-        def closure():
-            outputs = net(inputs)
-            loss = criterion(outputs, targets)
-            return loss.item()
-        
-        optimizer.step(loss=loss.item(), closure=closure)
+        optimizer.step()
 
         train_loss += loss.item()
         _, predicted = outputs.max(1)
@@ -123,7 +117,7 @@ def train(epoch):
 
         progress_bar(batch_idx, len(trainloader), 'Loss: %.3f | Acc: %.3f%% (%d/%d) | lr: %.5f | rho: %.5f'
                      % (train_loss/(batch_idx+1), 100.*correct/total, correct, 
-                        total, optimizer.param_groups[0]['lr'], optimizer._rho))
+                        total, optimizer.param_groups[0]['lr'], rho))
 
 
 def test(epoch):
@@ -160,8 +154,32 @@ def test(epoch):
         torch.save(state, './checkpoint/ckpt.pth')
         best_acc = acc
 
-
+decrease_ex = next(iter(trainloader))
+outputs = net(decrease_ex[0].to(device))
+loss_prev = criterion(outputs, decrease_ex[1].to(device)).item()
+lr = args.lr
+rho = inf
 for epoch in range(start_epoch, start_epoch+200):
     train(epoch)
     test(epoch)
-    # scheduler.step()
+    
+    # Compute rho every 10 epochs
+    if epoch % 10 == 0:
+        with torch.no_grad():
+            outputs = net(decrease_ex[0].to(device))
+        loss = criterion(outputs, decrease_ex[1].to(device)).item()
+        rho = loss_prev - loss / (lr * torch.linalg.norm(optimizer.updates))
+        optimizer.updates = None
+        loss_prev = loss
+
+        # Update lr
+        if rho < 0.25:
+            lr = lr / 2
+        elif rho > 0.75:
+            lr = lr * 2
+    
+        # Update optimizer
+        optimizer = STORM1(net.parameters(), lr=lr, momentum=0.9)
+
+
+    
