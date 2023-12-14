@@ -64,10 +64,12 @@ class TLRScheduler(LRScheduler):
         if loss is None:
             raise ValueError('loss should not be None.')
 
-        self._step_count += 1
         if self._step_count == 1:
             self._prev_loss = loss
+            self._step_count += 1
             return
+        
+        self._step_count += 1
         if self._step_count % self.patience == 0:
             self._update_rho(loss)
             self._update_lr()

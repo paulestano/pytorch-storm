@@ -16,6 +16,7 @@ import argparse
 
 from resnet import *
 from storm1 import *
+from tlr_scheduler import *
 from utils import progress_bar
 
 
@@ -107,7 +108,7 @@ if args.resume:
 criterion = nn.CrossEntropyLoss()
 optimizer = STORM1(net.parameters(), lr=args.lr, momentum=0.9) if not args.sgd else optim.SGD(
     net.parameters(), lr=args.lr, momentum=0.9, weight_decay=0)
-scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=200) if args.sgd else None
+scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=200) if args.sgd else TLRScheduler(optimizer)
 
 # Training
 def train(epoch):
@@ -140,11 +141,12 @@ def train(epoch):
         if not args.sgd:
             progress_bar(batch_idx, len(trainloader), 'Loss: %.3f | Acc: %.3f%% (%d/%d) | lr: %.5f | rho: %.5f'
                         % (train_loss/(batch_idx+1), 100.*correct/total, correct,
-                            total, optimizer.param_groups[0]['lr'], rho))
+                            total, optimizer.param_groups[0]['lr'], scheduler._rho))
         else:
             progress_bar(batch_idx, len(trainloader), 'Loss: %.3f | Acc: %.3f%% (%d/%d) | lr: %.5f'
                      % (train_loss/(batch_idx+1), 100.*correct/total, correct,
                         total, optimizer.param_groups[0]['lr']))
+    return loss.item()
 
 def test(epoch):
     global best_acc
@@ -181,33 +183,11 @@ def test(epoch):
         best_acc = acc
 
 
-decrease_ex = next(iter(trainloader))
-outputs = net(decrease_ex[0].to(device))
-loss_prev = criterion(outputs, decrease_ex[1].to(device)).item()
-lr = args.lr
-rho = inf
 for epoch in range(start_epoch, start_epoch+200):
-    train(epoch)
+    loss = train(epoch)
     test(epoch)
 
-    # Update scheduler if using SGD
-    if scheduler is not None:
+    if not args.sgd:
+        scheduler.step(loss)
+    else:
         scheduler.step()
-    
-    # Compute rho every 10 epochs if using STORM1
-    if epoch % 10 == 0 and not args.sgd:
-        with torch.no_grad():
-            outputs = net(decrease_ex[0].to(device))
-        loss = criterion(outputs, decrease_ex[1].to(device)).item()
-        rho = loss_prev - loss / (lr * torch.linalg.norm(optimizer.updates))
-        optimizer.updates = None
-        loss_prev = loss
-
-        # Update lr
-        if rho < 0.25:
-            lr = lr / 2
-        elif rho > 0.75:
-            lr = lr * 2
-
-        # Update optimizer
-        optimizer = STORM1(net.parameters(), lr=lr, momentum=0.9)
