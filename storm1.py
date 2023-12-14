@@ -43,7 +43,8 @@ class STORM1(Optimizer):
             differentiable=differentiable,
         )
         super(STORM1, self).__init__(params, defaults)
-
+        self._rho = 0.0
+        self._momentum_rho = .9
     def storm1(
         self,
         params: List[Tensor],
@@ -140,16 +141,9 @@ class STORM1(Optimizer):
         updated_loss = closure()    
             
         actual_reduction = loss - updated_loss
-        self._rho = actual_reduction / \
-                (lr * self._norm_d) # We consider lr to be the same for all groups
         
-        if self._rho < eta_1:
-            lr = lr * gamma_1
-        elif self._rho > eta_2:
-            lr = lr * gamma_2
-        
-        # Update learning
-        for group in self.param_groups:
-            group["lr"] = lr
+        # Update rho and apply momentum to mitigate the impact of stochasticity
+        self._rho = self._momentum_rho * self._rho + (1 - self._momentum_rho) * actual_reduction / \
+                (lr * self._norm_d)
 
         return loss

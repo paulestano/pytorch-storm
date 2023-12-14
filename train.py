@@ -92,6 +92,7 @@ optimizer = STORM1(net.parameters(), lr=args.lr, momentum=0.9)
 # Training
 def train(epoch):
     print('\nEpoch: %d' % epoch)
+    lr = optimizer.param_groups[0]['lr']
     net.train()
     train_loss = 0
     correct = 0
@@ -107,13 +108,13 @@ def train(epoch):
             l2_reg += torch.norm(param)
         loss = criterion(outputs, targets) + l2_lambda * l2_reg
         loss.backward()
-        
+
         # closure for actual reduction computation (required by TR1)
         def closure():
             outputs = net(inputs)
             loss = criterion(outputs, targets)
             return loss.item()
-        
+
         optimizer.step(loss=loss.item(), closure=closure)
 
         train_loss += loss.item()
@@ -122,8 +123,16 @@ def train(epoch):
         correct += predicted.eq(targets).sum().item()
 
         progress_bar(batch_idx, len(trainloader), 'Loss: %.3f | Acc: %.3f%% (%d/%d) | lr: %.5f | rho: %.5f'
-                     % (train_loss/(batch_idx+1), 100.*correct/total, correct, 
+                     % (train_loss/(batch_idx+1), 100.*correct/total, correct,
                         total, optimizer.param_groups[0]['lr'], optimizer._rho))
+
+    # Update learning after each epoch if rho is too small or too large
+    if optimizer._rho < .25:
+        lr = lr * .25
+    elif optimizer._rho > .75:
+        lr = lr * 2.0
+    for param_group in optimizer.param_groups:
+        param_group['lr'] = lr
 
 
 def test(epoch):
