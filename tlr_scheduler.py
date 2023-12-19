@@ -58,17 +58,15 @@ class TLRScheduler(LRScheduler):
         return self._lr
 
     def step(self, loss: float = None) -> None:
-        if loss is None and self._step_count == 0:
-            self._step_count += 1
-            return
         if loss is None:
+            if self._step_count == 0:
+                return # do nothing on the first call
             raise ValueError('loss should not be None.')
 
-        if self._step_count == 1:
+        if self._step_count == 0:
             self._prev_loss = loss
             self._step_count += 1
             return
-        
         self._step_count += 1
         if self._step_count % self.patience == 0:
             self._update_rho(loss)
