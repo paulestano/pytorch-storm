@@ -111,7 +111,6 @@ net = ResNet18()
 net = net.to(device)
 if device == "cuda":
     net = torch.nn.DataParallel(net)
-    cudnn.benchmark = True
 
 if args.resume:
     # Load checkpoint.
@@ -163,7 +162,7 @@ def train(epoch):
         # If these gradients do not contain infs or NaNs, optimizer.step() is then called,
         # otherwise, optimizer.step() is skipped.
         scaler.step(optimizer)
-        # optimizer.step()
+        
         # Updates the scale for next iteration.
         scaler.update()
         train_loss += loss.item()
