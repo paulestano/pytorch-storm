@@ -5,8 +5,8 @@ STORM1 exploits a specific optimizer, `storm1.py`, and an ad-hoc scheduling of t
 
 ## To train ResNet-18 on CIFAR-10 using STORM1
 ```
-cd pytorch-storm1
-python train.py
+cd pytorch-storm
+python train.py  -f 7800 --lr 1 
 ```
 ## Results
 | Method      | Test Acc. (%) |
