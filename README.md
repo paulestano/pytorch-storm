@@ -3,7 +3,7 @@ PyTorch implementation of a first-order stochastic trust-region method ([**STORM
 
 STORM1 exploits a specific optimizer, `storm1.py`, and an ad-hoc scheduling of the learning rate.
 
-## To train ResNet-18 on CIFAR-10 using STORM1
+## To train ResNet-18 on CIFAR-10 using STORM
 ```
 cd pytorch-storm
 python train.py  -f 7800 --lr 1 
