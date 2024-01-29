@@ -17,12 +17,14 @@ import argparse
 from resnet import *
 from storm1 import *
 from tqdm import tqdm
-from utils import progress_bar
 from torch.cuda.amp import autocast, GradScaler
 
 
 parser = argparse.ArgumentParser(description="PyTorch CIFAR10 STORM1 Training")
 parser.add_argument("--lr", default=0.1, type=float, help="learning rate")
+parser.add_argument(
+    "--frequency", "-f", default=10, type=int, help="rho frequency update"
+)
 parser.add_argument(
     "--resume", "-r", action="store_true", help="resume from checkpoint"
 )
@@ -147,7 +149,8 @@ def train(epoch):
     for batch_idx, (inputs, targets) in pbar:
         inputs, targets = inputs.to(device), targets.to(device)
         optimizer.zero_grad()
-        with autocast(dtype=torch.float16):
+        with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
+        
             outputs = net(inputs)
 
             # We use L2 regularization instead of weight decay
@@ -156,15 +159,11 @@ def train(epoch):
             for param in net.parameters():
                 l2_reg += torch.norm(param, p=2)
             loss = criterion(outputs, targets) + l2_lambda * l2_reg
-        scaler.scale(loss).backward()
-
-        # scaler.step() first unscales the gradients of the optimizer's assigned params.
-        # If these gradients do not contain infs or NaNs, optimizer.step() is then called,
-        # otherwise, optimizer.step() is skipped.
-        scaler.step(optimizer)
         
+        loss.backward()
+        optimizer.step()
+
         # Updates the scale for next iteration.
-        scaler.update()
         train_loss += loss.item()
         _, predicted = outputs.max(1)
         total += targets.size(0)
@@ -235,7 +234,6 @@ loss_prev = criterion(outputs, decrease_ex[1].to(device)).item()
 lr = args.lr
 rho = inf
 # Creates a GradScaler once at the beginning of training.
-scaler = GradScaler()
 for epoch in range(start_epoch, start_epoch + 200):
     train(epoch)
     test(epoch)
@@ -245,11 +243,11 @@ for epoch in range(start_epoch, start_epoch + 200):
         scheduler.step()
 
     # Compute rho every 10 epochs if using STORM1
-    if epoch % 10 == 0 and not args.sgd:
+    if epoch % args.frequency == 0 and not args.sgd:
         with torch.no_grad():
             outputs = net(decrease_ex[0].to(device))
         loss = criterion(outputs, decrease_ex[1].to(device)).item()
-        rho = loss_prev - loss / (lr * torch.linalg.norm(optimizer.updates))
+        rho = (loss_prev - loss) / (lr * torch.linalg.norm(optimizer.updates, 2))
         optimizer.updates = None
         loss_prev = loss
 
