@@ -24,7 +24,7 @@ parser = argparse.ArgumentParser(description="PyTorch CIFAR10 STORM1 Training")
 parser.add_argument("--lr", default=0.1, type=float, help="learning rate")
 parser.add_argument("--l2", default=1e-4, type=float, help="l2 regularization")
 parser.add_argument(
-    "--frequency", "-f", default=10, type=int, help="rho frequency update"
+    "--frequency", "-f", default=390, type=int, help="rho frequency update. Default: 390"
 )
 parser.add_argument(
     "--resume", "-r", action="store_true", help="resume from checkpoint"
@@ -127,6 +127,7 @@ if args.resume:
 criterion = nn.CrossEntropyLoss()
 decrease_ex = next(iter(trainloader))
 
+
 def closure():
     outputs = net(decrease_ex[0].to(device))
     loss = criterion(outputs, decrease_ex[1].to(device))
@@ -135,8 +136,15 @@ def closure():
         loss += args.l2 * torch.norm(param, p=2)
     return loss
 
+
 optimizer = (
-    STORM1(net.parameters(), lr=args.lr, momentum=0.9,loss=closure)
+    STORM1(
+        net.parameters(),
+        lr=args.lr,
+        momentum=0.9,
+        loss=closure,
+        frequency=args.frequency,
+    )
     if not args.sgd
     else optim.SGD(net.parameters(), lr=args.lr, momentum=0.9, weight_decay=0)
 )
@@ -160,7 +168,7 @@ def train(epoch):
     for batch_idx, (inputs, targets) in pbar:
         inputs, targets = inputs.to(device), targets.to(device)
         optimizer.zero_grad()
-        
+
         with torch.autocast(device_type=device):
             outputs = net(inputs)
 
@@ -170,7 +178,7 @@ def train(epoch):
             for param in net.parameters():
                 l2_reg += torch.norm(param, p=2)
             loss = criterion(outputs, targets) + l2_lambda * l2_reg
-        
+
         # Scales loss.  Calls backward() on scaled loss to create scaled gradients.
         scaler.scale(loss).backward()
         if not args.sgd:
@@ -194,6 +202,7 @@ def train(epoch):
                     # "lr": optimizer.param_groups[0]["lr"],
                 }
             )
+            pbar.desc = "Epoch {}, lr {}".format(epoch, optimizer.param_groups[0]["lr"])
         else:
             pbar.set_postfix(
                 {
@@ -249,7 +258,6 @@ lr = args.lr
 rho = inf
 # Creates a GradScaler once at the beginning of training.
 scaler = GradScaler()
-
 
 
 for epoch in range(start_epoch, start_epoch + 200):

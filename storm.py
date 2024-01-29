@@ -76,13 +76,13 @@ class STORM1(Optimizer):
         """
         
         flat_grad = []
+        self.iter += 1
         for group in self.param_groups:
             momentum = group["momentum"]
             nesterov = group["nesterov"]
             dampening = group["dampening"]
             maximize = group["maximize"]
             frequency = group["frequency"]
-            self.iter += 1
             for p in group["params"]:
                 if p.grad is not None:
                     d_p = p.grad if not maximize else -p.grad
@@ -149,12 +149,13 @@ class STORM1(Optimizer):
             self.loss_prev = self.loss()
 
         if self.loss is not None and self.iter % frequency == 0:
+            lr = group["lr"]
+
             loss = self.loss()
             rho = (self.loss_prev - loss) / (lr * torch.linalg.norm(self.updates, 2))
             self.updates = None
             self.loss_prev = loss
 
-            lr = group["lr"]
 
             # Update lr
             if rho < 0.25:
@@ -166,5 +167,3 @@ class STORM1(Optimizer):
             
             for group in self.param_groups:
                 group["lr"] = lr
-
-            return closure()
