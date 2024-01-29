@@ -12,4 +12,4 @@ python train.py
 | Method      | Test Acc. (%) |
 | ----------- | ----------- |
 | SGD + CosineAnnealingLR   | 92.66        |
-| STORM1 (ours)   | 92.8        |
+| STORM (ours)   | 92.8        |
