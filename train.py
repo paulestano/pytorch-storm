@@ -151,7 +151,7 @@ def train(epoch):
         inputs, targets = inputs.to(device), targets.to(device)
         optimizer.zero_grad()
         
-        with torch.cuda.amp.autocast(device_type=device, dtype=torch.bfloat16):
+        with torch.autocast(device_type=device, dtype=torch.bfloat16):
             outputs = net(inputs)
 
             # We use L2 regularization instead of weight decay
@@ -164,6 +164,7 @@ def train(epoch):
         # Scales loss.  Calls backward() on scaled loss to create scaled gradients.
         scaler.scale(loss).backward()
         scaler.step(optimizer)
+        scaler.update()
 
         # Updates the scale for next iteration.
         train_loss += loss.item()
