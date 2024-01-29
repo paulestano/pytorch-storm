@@ -15,7 +15,7 @@ import os
 import argparse
 
 from resnet import *
-from storm1 import *
+from storm import *
 from tqdm import tqdm
 from torch.cuda.amp import autocast, GradScaler
 
@@ -125,8 +125,17 @@ if args.resume:
     start_epoch = checkpoint["epoch"]
 
 criterion = nn.CrossEntropyLoss()
+
+def closure():
+    loss = criterion(outputs, decrease_ex[1].to(device))
+# outputs = net(decrease_ex[0].to(device))
+
+    for param in net.parameters():
+        loss += args.l2 * torch.norm(param, p=2)
+    return loss
+
 optimizer = (
-    STORM1(net.parameters(), lr=args.lr, momentum=0.9)
+    STORM1(net.parameters(), lr=args.lr, momentum=0.9,loss=closure)
     if not args.sgd
     else optim.SGD(net.parameters(), lr=args.lr, momentum=0.9, weight_decay=0)
 )
@@ -163,7 +172,10 @@ def train(epoch):
         
         # Scales loss.  Calls backward() on scaled loss to create scaled gradients.
         scaler.scale(loss).backward()
-        scaler.step(optimizer)
+        if not args.sgd:
+            scaler.step(optimizer)
+        else:
+            scaler.step(optimizer)
         scaler.update()
 
         # Updates the scale for next iteration.
@@ -177,7 +189,7 @@ def train(epoch):
                 {
                     "loss": train_loss / (batch_idx + 1),
                     "acc": 100.0 * correct / total,
-                    "rho": rho,
+                    "rho": optimizer.rho,
                     # "lr": optimizer.param_groups[0]["lr"],
                 }
             )
@@ -232,12 +244,14 @@ def test(epoch):
 
 
 decrease_ex = next(iter(trainloader))
-outputs = net(decrease_ex[0].to(device))
-loss_prev = criterion(outputs, decrease_ex[1].to(device)).item()
+# loss_prev = criterion(outputs, decrease_ex[1].to(device)).item()
 lr = args.lr
 rho = inf
 # Creates a GradScaler once at the beginning of training.
 scaler = GradScaler()
+
+
+
 for epoch in range(start_epoch, start_epoch + 200):
     train(epoch)
     test(epoch)
@@ -247,24 +261,24 @@ for epoch in range(start_epoch, start_epoch + 200):
         scheduler.step()
 
     # Compute rho every 10 epochs if using STORM1
-    if epoch % args.frequency == 0 and not args.sgd:
-        with torch.no_grad():
-            outputs = net(decrease_ex[0].to(device))
-        loss = criterion(outputs, decrease_ex[1].to(device)).item()
-        l2_lambda = args.l2
-        l2_reg = torch.tensor(0.0).to(device)
-        for param in net.parameters():
-            l2_reg += torch.norm(param, p=2)
-        loss += l2_lambda * l2_reg
-        rho = (loss_prev - loss) / (lr * torch.linalg.norm(optimizer.updates, 2))
-        optimizer.updates = None
-        loss_prev = loss
+    # if epoch % args.frequency == 0 and not args.sgd:
+    #     with torch.no_grad():
+    #         outputs = net(decrease_ex[0].to(device))
+    #     loss = criterion(outputs, decrease_ex[1].to(device)).item()
+    #     l2_lambda = args.l2
+    #     l2_reg = torch.tensor(0.0).to(device)
+    #     for param in net.parameters():
+    #         l2_reg += torch.norm(param, p=2)
+    #     loss += l2_lambda * l2_reg
+    #     rho = (loss_prev - loss) / (lr * torch.linalg.norm(optimizer.updates, 2))
+    #     optimizer.updates = None
+    #     loss_prev = loss
 
-        # Update lr
-        if rho < 0.25:
-            lr = lr / 2
-        elif rho > 0.75:
-            lr = lr * 2
+    #     # Update lr
+    #     if rho < 0.25:
+    #         lr = lr / 2
+    #     elif rho > 0.75:
+    #         lr = lr * 2
 
-        # Update optimizer
-        optimizer = STORM1(net.parameters(), lr=lr, momentum=0.9)
+    #     # Update optimizer
+    #     optimizer = STORM1(net.parameters(), lr=lr, momentum=0.9)
