@@ -151,17 +151,19 @@ def train(epoch):
         inputs, targets = inputs.to(device), targets.to(device)
         optimizer.zero_grad()
         
-        outputs = net(inputs)
+        with torch.cuda.amp.autocast(device=device, dtype=torch.bfloat16):
+            outputs = net(inputs)
 
-        # We use L2 regularization instead of weight decay
-        l2_lambda = args.l2
-        l2_reg = torch.tensor(0.0).to(device)
-        for param in net.parameters():
-            l2_reg += torch.norm(param, p=2)
-        loss = criterion(outputs, targets) + l2_lambda * l2_reg
+            # We use L2 regularization instead of weight decay
+            l2_lambda = args.l2
+            l2_reg = torch.tensor(0.0).to(device)
+            for param in net.parameters():
+                l2_reg += torch.norm(param, p=2)
+            loss = criterion(outputs, targets) + l2_lambda * l2_reg
         
-        loss.backward()
-        optimizer.step()
+        # Scales loss.  Calls backward() on scaled loss to create scaled gradients.
+        scaler.scale(loss).backward()
+        scaler.step(optimizer)
 
         # Updates the scale for next iteration.
         train_loss += loss.item()
@@ -234,6 +236,7 @@ loss_prev = criterion(outputs, decrease_ex[1].to(device)).item()
 lr = args.lr
 rho = inf
 # Creates a GradScaler once at the beginning of training.
+scaler = GradScaler()
 for epoch in range(start_epoch, start_epoch + 200):
     train(epoch)
     test(epoch)
