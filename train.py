@@ -151,7 +151,7 @@ def train(epoch):
         inputs, targets = inputs.to(device), targets.to(device)
         optimizer.zero_grad()
         
-        with torch.cuda.amp.autocast(device=device, dtype=torch.bfloat16):
+        with torch.cuda.amp.autocast(device_type=device, dtype=torch.bfloat16):
             outputs = net(inputs)
 
             # We use L2 regularization instead of weight decay
