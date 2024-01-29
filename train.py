@@ -125,10 +125,11 @@ if args.resume:
     start_epoch = checkpoint["epoch"]
 
 criterion = nn.CrossEntropyLoss()
+decrease_ex = next(iter(trainloader))
 
 def closure():
+    outputs = net(decrease_ex[0].to(device))
     loss = criterion(outputs, decrease_ex[1].to(device))
-# outputs = net(decrease_ex[0].to(device))
 
     for param in net.parameters():
         loss += args.l2 * torch.norm(param, p=2)
@@ -243,7 +244,6 @@ def test(epoch):
         best_acc = acc
 
 
-decrease_ex = next(iter(trainloader))
 # loss_prev = criterion(outputs, decrease_ex[1].to(device)).item()
 lr = args.lr
 rho = inf

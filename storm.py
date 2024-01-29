@@ -145,14 +145,16 @@ class STORM1(Optimizer):
             for p, momentum_buffer in zip(params_with_grad, momentum_buffer_list):
                 state = self.state[p]
                 state["momentum_buffer"] = momentum_buffer
-        if self.loss is not None and iter == 1:
+        if self.loss is not None and self.iter == 1:
             self.loss_prev = self.loss()
 
-        if self.loss is not None and iter % frequency == 0:
+        if self.loss is not None and self.iter % frequency == 0:
             loss = self.loss()
             rho = (self.loss_prev - loss) / (lr * torch.linalg.norm(self.updates, 2))
             self.updates = None
             self.loss_prev = loss
+
+            lr = group["lr"]
 
             # Update lr
             if rho < 0.25:
