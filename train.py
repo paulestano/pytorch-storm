@@ -22,6 +22,7 @@ from torch.cuda.amp import autocast, GradScaler
 
 parser = argparse.ArgumentParser(description="PyTorch CIFAR10 STORM1 Training")
 parser.add_argument("--lr", default=0.1, type=float, help="learning rate")
+parser.add_argument("--l2", default=1e-4, type=float, help="l2 regularization")
 parser.add_argument(
     "--frequency", "-f", default=10, type=int, help="rho frequency update"
 )
@@ -154,7 +155,7 @@ def train(epoch):
             outputs = net(inputs)
 
             # We use L2 regularization instead of weight decay
-            l2_lambda = 1e-4
+            l2_lambda = args.l2
             l2_reg = torch.tensor(0.0).to(device)
             for param in net.parameters():
                 l2_reg += torch.norm(param, p=2)
@@ -247,6 +248,11 @@ for epoch in range(start_epoch, start_epoch + 200):
         with torch.no_grad():
             outputs = net(decrease_ex[0].to(device))
         loss = criterion(outputs, decrease_ex[1].to(device)).item()
+        l2_lambda = args.l2
+        l2_reg = torch.tensor(0.0).to(device)
+        for param in net.parameters():
+            l2_reg += torch.norm(param, p=2)
+        loss += l2_lambda * l2_reg
         rho = (loss_prev - loss) / (lr * torch.linalg.norm(optimizer.updates, 2))
         optimizer.updates = None
         loss_prev = loss
