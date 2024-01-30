@@ -22,6 +22,8 @@ from torch.cuda.amp import autocast, GradScaler
 
 parser = argparse.ArgumentParser(description="PyTorch CIFAR10 STORM1 Training")
 parser.add_argument("--lr", default=0.1, type=float, help="learning rate")
+parser.add_argument("--gamma_1", "--gamma1", default=0.5, type=float, help="STORM gamma_1")
+parser.add_argument("--gamma_2", "--gamma2", default=2, type=float, help="STORM gamma_2")
 parser.add_argument("--l2", default=1e-4, type=float, help="l2 regularization")
 parser.add_argument(
     "--frequency", "-f", default=390, type=int, help="rho frequency update. Default: 390"

@@ -19,7 +19,7 @@ class STORM(Optimizer):
         params: List[Tensor],
         lr: float = 1.0,
         momentum: float = 0.0,
-        gamma_1: float = 0.25,
+        gamma_1: float = 0.5,
         gamma_2: float = 2,
         eta_1: float = 0.25,
         eta_2: float = 0.75,
@@ -35,10 +35,6 @@ class STORM(Optimizer):
         defaults = dict(
             lr=lr,
             momentum=momentum,
-            gamma_1=gamma_1,
-            gamma_2=gamma_2,
-            eta_1=eta_1,
-            eta_2=eta_2,
             dampening=dampening,
             nesterov=nesterov,
             maximize=maximize,
@@ -53,6 +49,10 @@ class STORM(Optimizer):
         self.state['rho'] = None
         self.state['loss'] = loss
         self.state['loss_prev'] = None
+        self.state['gamma_1'] = gamma_1
+        self.state['gamma_2'] = gamma_2
+        self.state['eta_1'] = eta_1
+        self.state['eta_2'] = eta_2
         # self.state['bucket'] = LeakyBucket(100, 2, torch.float32, torch.device("cuda:0"))
 
     def storm1(
@@ -155,6 +155,10 @@ class STORM(Optimizer):
 
         if loss is not None and iter % frequency == 0:
             lr = group["lr"]
+            gamma_1 = self.state['gamma_1']
+            gamma_2 = self.state['gamma_2']
+            eta_1 = self.state['eta_1']
+            eta_2 = self.state['eta_2']
             loss_prev = self.state['loss_prev']
             loss = loss()
             updates = self.state['updates']
@@ -164,10 +168,10 @@ class STORM(Optimizer):
 
             self.state['rho'] = rho
             # Update lr
-            if rho < 0.25:
-                lr = lr / 2
-            elif rho > 0.75:
-                lr = lr * 2
+            if rho < eta_1:
+                lr = lr * gamma_1
+            elif rho > eta_2:
+                lr = lr * gamma_2
             
             self.rho = rho
             
