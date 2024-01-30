@@ -146,6 +146,8 @@ optimizer = (
         momentum=0.9,
         loss=closure,
         frequency=args.frequency,
+        gamma_1=args.gamma_1,
+        gamma_2=args.gamma_2,
     )
     if not args.sgd
     else optim.SGD(net.parameters(), lr=args.lr, momentum=0.9, weight_decay=0)
