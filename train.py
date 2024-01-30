@@ -138,7 +138,7 @@ def closure():
 
 
 optimizer = (
-    STORM1(
+    STORM(
         net.parameters(),
         lr=args.lr,
         momentum=0.9,
@@ -198,7 +198,7 @@ def train(epoch):
                 {
                     "loss": train_loss / (batch_idx + 1),
                     "acc": 100.0 * correct / total,
-                    "rho": optimizer.rho,
+                    "rho": optimizer.state['rho'],
                     # "lr": optimizer.param_groups[0]["lr"],
                 }
             )
@@ -267,26 +267,3 @@ for epoch in range(start_epoch, start_epoch + 200):
     # Update scheduler if using SGD
     if scheduler is not None:
         scheduler.step()
-
-    # Compute rho every 10 epochs if using STORM1
-    # if epoch % args.frequency == 0 and not args.sgd:
-    #     with torch.no_grad():
-    #         outputs = net(decrease_ex[0].to(device))
-    #     loss = criterion(outputs, decrease_ex[1].to(device)).item()
-    #     l2_lambda = args.l2
-    #     l2_reg = torch.tensor(0.0).to(device)
-    #     for param in net.parameters():
-    #         l2_reg += torch.norm(param, p=2)
-    #     loss += l2_lambda * l2_reg
-    #     rho = (loss_prev - loss) / (lr * torch.linalg.norm(optimizer.updates, 2))
-    #     optimizer.updates = None
-    #     loss_prev = loss
-
-    #     # Update lr
-    #     if rho < 0.25:
-    #         lr = lr / 2
-    #     elif rho > 0.75:
-    #         lr = lr * 2
-
-    #     # Update optimizer
-    #     optimizer = STORM1(net.parameters(), lr=lr, momentum=0.9)

@@ -9,10 +9,12 @@ from argparse import ArgumentError
 from typing import Any, List, Optional, Union
 from functools import reduce
 
-__all__ = ["STORM1"]
+from leaky_bucket import LeakyBucket
+
+__all__ = ["STORM"]
 
 
-class STORM1(Optimizer):
+class STORM(Optimizer):
     def __init__(
         self,
         params: List[Tensor],
@@ -46,11 +48,13 @@ class STORM1(Optimizer):
             frequency=frequency,
             iter=0,
         )
-        super(STORM1, self).__init__(params, defaults)
-        self.updates = None
-        self.iter = 0
-        self.rho = None
-        self.loss = loss
+        super(STORM, self).__init__(params, defaults)
+        self.state['updates'] = None
+        self.state['iter'] = 0
+        self.state['rho'] = None
+        self.state['loss'] = loss
+        self.state['loss_prev'] = None
+        # self.state['bucket'] = LeakyBucket(100, 2, torch.float32, torch.device("cuda:0"))
 
     def storm1(
         self,
@@ -76,7 +80,7 @@ class STORM1(Optimizer):
         """
         
         flat_grad = []
-        self.iter += 1
+        self.state['iter'] += 1
         for group in self.param_groups:
             momentum = group["momentum"]
             nesterov = group["nesterov"]
@@ -113,14 +117,14 @@ class STORM1(Optimizer):
                     view = p.new(p.numel()).zero_()
                 flat_grad.append(view)
         flat_grad = torch.cat(flat_grad, 0)
-        self._norm_d = torch.linalg.norm(flat_grad)
+        self._norm_d = torch.norm(flat_grad, p=2)
 
         alpha = group["lr"] / self._norm_d
 
-        if self.updates is None:
-            self.updates = alpha * flat_grad.clone()
+        if self.state['updates'] is None:
+            self.state['updates'] = alpha * flat_grad
         else:
-            self.updates = self.updates + alpha * flat_grad
+            self.state['updates'] += alpha * flat_grad
                     
 
 
@@ -145,18 +149,21 @@ class STORM1(Optimizer):
             for p, momentum_buffer in zip(params_with_grad, momentum_buffer_list):
                 state = self.state[p]
                 state["momentum_buffer"] = momentum_buffer
-        if self.loss is not None and self.iter == 1:
-            self.loss_prev = self.loss()
+        loss = self.state['loss']
+        iter = self.state['iter']
+        if loss is not None and iter == 1:
+            self.state['loss_prev'] = loss()
 
-        if self.loss is not None and self.iter % frequency == 0:
+        if loss is not None and iter % frequency == 0:
             lr = group["lr"]
+            loss_prev = self.state['loss_prev']
+            loss = loss()
+            updates = self.state['updates']
+            rho = (loss_prev - loss) / torch.linalg.norm(updates, 2)
+            self.state['updates'] = None
+            self.state['loss_prev'] = loss
 
-            loss = self.loss()
-            rho = (self.loss_prev - loss) / (lr * torch.linalg.norm(self.updates, 2))
-            self.updates = None
-            self.loss_prev = loss
-
-
+            self.state['rho'] = rho
             # Update lr
             if rho < 0.25:
                 lr = lr / 2
