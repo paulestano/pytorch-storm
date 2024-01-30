@@ -9,7 +9,6 @@ from argparse import ArgumentError
 from typing import Any, List, Optional, Union
 from functools import reduce
 
-from leaky_bucket import LeakyBucket
 
 __all__ = ["STORM"]
 
