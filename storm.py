@@ -48,7 +48,6 @@ class STORM(Optimizer):
         self.state["iter"] = 0
         self.state["rho"] = None
         self.state["loss"] = loss
-        self.state["loss_prev"] = None
         self.state["gamma_1"] = gamma_1
         self.state["gamma_2"] = gamma_2
         self.state["eta_1"] = eta_1
@@ -135,9 +134,7 @@ class STORM(Optimizer):
         flat_grad = torch.cat(flat_grad, 0)
         self._norm_d = torch.norm(flat_grad, p=2)
 
-        alpha = group["lr"] / self._norm_d
-
-        self.state["bucket"].add(alpha * flat_grad.norm(2))
+        self.state["bucket"].add(group['lr'] * flat_grad.norm(2))
 
         for group in self.param_groups:
             params_with_grad = []
@@ -167,11 +164,9 @@ class STORM(Optimizer):
             gamma_2 = self.state["gamma_2"]
             eta_1 = self.state["eta_1"]
             eta_2 = self.state["eta_2"]
-            # loss_prev = self.state["loss_prev"]
             loss = loss()
             updates = self.state["bucket"].mean_std()[0]
             rho = (loss_prev - loss) / updates
-            # self.state["updates"] = None
             self.state["loss_prev"] = loss
 
             self.state["rho"] = rho
