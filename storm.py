@@ -56,7 +56,7 @@ class STORM(Optimizer):
 
         p = self.param_groups[0]["params"][0]
         if "bucket" not in self.state:
-            self.state["bucket"] = LeakyBucket(100, 8, p.dtype, p.device)
+            self.state["bucket"] = LeakyBucket(100, 4, p.dtype, p.device)
 
     # methods for gather flat parameters
     def _gather_flat_param(self):
