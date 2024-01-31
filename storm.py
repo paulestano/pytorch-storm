@@ -9,6 +9,8 @@ from argparse import ArgumentError
 from typing import Any, List, Optional, Union
 from functools import reduce
 
+from bucket import LeakyBucket
+
 
 __all__ = ["STORM"]
 
@@ -40,22 +42,33 @@ class STORM(Optimizer):
             maximize=maximize,
             foreach=foreach,
             differentiable=differentiable,
-            frequency=frequency,
-            iter=0,
         )
         super(STORM, self).__init__(params, defaults)
-        self.state['updates'] = None
-        self.state['iter'] = 0
-        self.state['rho'] = None
-        self.state['loss'] = loss
-        self.state['loss_prev'] = None
-        self.state['gamma_1'] = gamma_1
-        self.state['gamma_2'] = gamma_2
-        self.state['eta_1'] = eta_1
-        self.state['eta_2'] = eta_2
-        # self.state['bucket'] = LeakyBucket(100, 2, torch.float32, torch.device("cuda:0"))
+        self.state["updates"] = None
+        self.state["iter"] = 0
+        self.state["rho"] = None
+        self.state["loss"] = loss
+        self.state["loss_prev"] = None
+        self.state["gamma_1"] = gamma_1
+        self.state["gamma_2"] = gamma_2
+        self.state["eta_1"] = eta_1
+        self.state["eta_2"] = eta_2
+        self.state["frequency"] = frequency
 
-    def storm1(
+        p = self.param_groups[0]["params"][0]
+        if "bucket" not in self.state:
+            self.state["bucket"] = LeakyBucket(100, 8, p.dtype, p.device)
+
+    # methods for gather flat parameters
+    def _gather_flat_param(self):
+        views = []
+        for group in self.param_groups:
+            for p in group["params"]:
+                view = p.data.view(-1)
+                views.append(view)
+        return torch.cat(views, 0)
+
+    def storm(
         self,
         params: List[Tensor],
         d_p_list: List[Tensor],
@@ -63,9 +76,8 @@ class STORM(Optimizer):
         maximize: bool,
         lr: float,
     ) -> None:
-
         alpha = lr / self._norm_d
-        
+
         for i, param in enumerate(params):
             d_p = d_p_list[i] if not maximize else -d_p_list[i]
             param.add_(d_p, alpha=-alpha)
@@ -77,15 +89,22 @@ class STORM(Optimizer):
             closure : A closure that reevaluates the model
                 and returns the loss.
         """
-        
+
+        self.state["iter"] += 1
+
+        iter = self.state["iter"]
+        loss = self.state["loss"]
+        frequency = self.state["frequency"]
+
+        if loss is not None and iter % frequency == 0:
+            loss_prev = loss()
+
         flat_grad = []
-        self.state['iter'] += 1
         for group in self.param_groups:
             momentum = group["momentum"]
             nesterov = group["nesterov"]
             dampening = group["dampening"]
             maximize = group["maximize"]
-            frequency = group["frequency"]
             for p in group["params"]:
                 if p.grad is not None:
                     d_p = p.grad if not maximize else -p.grad
@@ -99,7 +118,6 @@ class STORM(Optimizer):
                             "STORM1 does not support sparse gradients, please consider SparseAdam instead"
                         )
                     if momentum != 0:
-
                         if buf is None:
                             buf = torch.clone(d_p).detach()
                         else:
@@ -109,9 +127,8 @@ class STORM(Optimizer):
                             d_p = d_p.add(buf, alpha=momentum)
                         else:
                             d_p = buf
-                    view = d_p.view(-1)    
+                    view = d_p.view(-1)
 
-                
                 else:
                     view = p.new(p.numel()).zero_()
                 flat_grad.append(view)
@@ -120,12 +137,7 @@ class STORM(Optimizer):
 
         alpha = group["lr"] / self._norm_d
 
-        if self.state['updates'] is None:
-            self.state['updates'] = alpha * flat_grad
-        else:
-            self.state['updates'] += alpha * flat_grad
-                    
-
+        self.state["bucket"].add(alpha * flat_grad.norm(2))
 
         for group in self.param_groups:
             params_with_grad = []
@@ -137,8 +149,8 @@ class STORM(Optimizer):
                 if p.grad is not None:
                     params_with_grad.append(p)
                     d_p_list.append(p.grad)
-                    
-            self.storm1(
+
+            self.storm(
                 params_with_grad,
                 d_p_list,
                 maximize=group["maximize"],
@@ -148,32 +160,28 @@ class STORM(Optimizer):
             for p, momentum_buffer in zip(params_with_grad, momentum_buffer_list):
                 state = self.state[p]
                 state["momentum_buffer"] = momentum_buffer
-        loss = self.state['loss']
-        iter = self.state['iter']
-        if loss is not None and iter == 1:
-            self.state['loss_prev'] = loss()
 
         if loss is not None and iter % frequency == 0:
             lr = group["lr"]
-            gamma_1 = self.state['gamma_1']
-            gamma_2 = self.state['gamma_2']
-            eta_1 = self.state['eta_1']
-            eta_2 = self.state['eta_2']
-            loss_prev = self.state['loss_prev']
+            gamma_1 = self.state["gamma_1"]
+            gamma_2 = self.state["gamma_2"]
+            eta_1 = self.state["eta_1"]
+            eta_2 = self.state["eta_2"]
+            # loss_prev = self.state["loss_prev"]
             loss = loss()
-            updates = self.state['updates']
-            rho = (loss_prev - loss) / torch.linalg.norm(updates, 2)
-            self.state['updates'] = None
-            self.state['loss_prev'] = loss
+            updates = self.state["bucket"].mean_std()[0]
+            rho = (loss_prev - loss) / updates
+            # self.state["updates"] = None
+            self.state["loss_prev"] = loss
 
-            self.state['rho'] = rho
+            self.state["rho"] = rho
             # Update lr
             if rho < eta_1:
                 lr = lr * gamma_1
             elif rho > eta_2:
                 lr = lr * gamma_2
-            
+
             self.rho = rho
-            
+
             for group in self.param_groups:
                 group["lr"] = lr

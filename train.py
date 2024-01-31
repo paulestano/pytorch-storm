@@ -130,13 +130,7 @@ criterion = nn.CrossEntropyLoss()
 decrease_ex = next(iter(trainloader))
 
 
-def closure():
-    outputs = net(decrease_ex[0].to(device))
-    loss = criterion(outputs, decrease_ex[1].to(device))
 
-    for param in net.parameters():
-        loss += args.l2 * torch.norm(param, p=2)
-    return loss
 
 
 optimizer = (
@@ -144,7 +138,6 @@ optimizer = (
         net.parameters(),
         lr=args.lr,
         momentum=0.9,
-        loss=closure,
         frequency=args.frequency,
         gamma_1=args.gamma_1,
         gamma_2=args.gamma_2,
@@ -172,7 +165,13 @@ def train(epoch):
     for batch_idx, (inputs, targets) in pbar:
         inputs, targets = inputs.to(device), targets.to(device)
         optimizer.zero_grad()
+        def closure():
+            outputs = net(inputs)
+            loss = criterion(outputs, targets)
 
+            for param in net.parameters():
+                loss += args.l2 * torch.norm(param, p=2)
+            return loss
         with torch.autocast(device_type=device):
             outputs = net(inputs)
 
@@ -185,6 +184,11 @@ def train(epoch):
 
         # Scales loss.  Calls backward() on scaled loss to create scaled gradients.
         scaler.scale(loss).backward()
+
+        scaler.unscale_(optimizer)
+        
+        # Should be passed as closure but not supported by AMP
+        optimizer.state["loss"] = closure
         if not args.sgd:
             scaler.step(optimizer)
         else:
