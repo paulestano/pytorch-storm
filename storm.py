@@ -167,13 +167,16 @@ class STORM(Optimizer):
             loss = loss()
             updates = self.state["bucket"].mean_std()[0]
             rho = (loss_prev - loss) / updates
-            self.state["loss_prev"] = loss
 
+            # self.state["loss_prev"] = loss
+
+            # Store rho for logging purposes
             self.state["rho"] = rho
+
             # Update lr
             if rho < eta_1:
                 lr = lr * gamma_1
-            elif rho > eta_2:
+            elif rho > eta_2 and updates / lr > eta_1 * lr:
                 lr = lr * gamma_2
 
             self.rho = rho
