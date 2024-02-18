@@ -54,7 +54,7 @@ def set_deterministic(seed=42):
 
 
 seed = 420  # any number
-set_deterministic(seed=seed)
+# set_deterministic(seed=seed)
 
 # Data
 print("==> Preparing data..")
@@ -165,13 +165,13 @@ def train(epoch):
     for batch_idx, (inputs, targets) in pbar:
         inputs, targets = inputs.to(device), targets.to(device)
         optimizer.zero_grad()
-        def closure():
-            outputs = net(inputs)
-            loss = criterion(outputs, targets)
+        # def closure():
+        #     outputs = net(inputs)
+        #     loss = criterion(outputs, targets)
 
-            for param in net.parameters():
-                loss += args.l2 * torch.norm(param, p=2)
-            return loss
+        #     for param in net.parameters():
+        #         loss += args.l2 * torch.norm(param, p=2)
+        #     return loss
         with torch.autocast(device_type=device):
             outputs = net(inputs)
 
@@ -181,14 +181,14 @@ def train(epoch):
             for param in net.parameters():
                 l2_reg += torch.norm(param, p=2)
             loss = criterion(outputs, targets) + l2_lambda * l2_reg
+        
+        optimizer.state["loss_bucket"].add(loss.item()) 
 
         # Scales loss.  Calls backward() on scaled loss to create scaled gradients.
         scaler.scale(loss).backward()
 
         scaler.unscale_(optimizer)
         
-        # Should be passed as closure but not supported by AMP
-        optimizer.state["loss"] = closure
         if not args.sgd:
             scaler.step(optimizer)
         else:

@@ -31,7 +31,7 @@ class STORM(Optimizer):
         maximize: bool = False,
         foreach: Optional[bool] = None,
         differentiable: bool = False,
-        frequency: int = 10,
+        frequency: int = 390,
         loss: callable = None,
     ):
         defaults = dict(
@@ -53,10 +53,13 @@ class STORM(Optimizer):
         self.state["eta_1"] = eta_1
         self.state["eta_2"] = eta_2
         self.state["frequency"] = frequency
-
+        self.loss_prev = None
         p = self.param_groups[0]["params"][0]
-        if "bucket" not in self.state:
-            self.state["bucket"] = LeakyBucket(100, 4, p.dtype, p.device)
+        if "red_bucket" not in self.state:
+            self.state["red_bucket"] = LeakyBucket(frequency, 4, p.dtype, p.device)
+        
+        if "loss_bucket" not in self.state:
+            self.state["loss_bucket"] = LeakyBucket(frequency, 4, p.dtype, p.device)
 
     # methods for gather flat parameters
     def _gather_flat_param(self):
@@ -92,11 +95,11 @@ class STORM(Optimizer):
         self.state["iter"] += 1
 
         iter = self.state["iter"]
-        loss = self.state["loss"]
+        # loss = self.state["loss"]
         frequency = self.state["frequency"]
 
-        if loss is not None and iter % frequency == 0:
-            loss_prev = loss()
+        if self.loss_prev is None:
+            self.loss_prev = self.state["loss_bucket"].buffer.mean().item()
 
         flat_grad = []
         for group in self.param_groups:
@@ -134,7 +137,8 @@ class STORM(Optimizer):
         flat_grad = torch.cat(flat_grad, 0)
         self._norm_d = torch.norm(flat_grad, p=2)
 
-        self.state["bucket"].add(group['lr'] * flat_grad.norm(2))
+        self.state["red_bucket"].add(group['lr'] * flat_grad.norm(2))
+        # self._updates += flat_grad.norm(2) * group["lr"] / self._norm_d 
 
         for group in self.param_groups:
             params_with_grad = []
@@ -157,17 +161,19 @@ class STORM(Optimizer):
             for p, momentum_buffer in zip(params_with_grad, momentum_buffer_list):
                 state = self.state[p]
                 state["momentum_buffer"] = momentum_buffer
-
-        if loss is not None and iter % frequency == 0:
+        if (iter + 1) % frequency == 0:
             lr = group["lr"]
             gamma_1 = self.state["gamma_1"]
             gamma_2 = self.state["gamma_2"]
             eta_1 = self.state["eta_1"]
             eta_2 = self.state["eta_2"]
-            loss = loss()
-            updates = self.state["bucket"].mean_std()[0]
+            loss = self.state["loss_bucket"].mean_std()[0]
+            loss_prev = self.loss_prev
+            updates = self.state["red_bucket"].mean_std()[0]
+            # updates = torch.norm(self._updates, p=2)
             rho = (loss_prev - loss) / updates
 
+            self.loss_prev = loss
             # self.state["loss_prev"] = loss
 
             # Store rho for logging purposes
@@ -176,7 +182,8 @@ class STORM(Optimizer):
             # Update lr
             if rho < eta_1:
                 lr = lr * gamma_1
-            elif rho > eta_2 and updates / lr > eta_1 * lr:
+            # elif rho > eta_2 and updates / lr > eta_1 * lr:
+            elif rho > eta_2:
                 lr = lr * gamma_2
 
             self.rho = rho
